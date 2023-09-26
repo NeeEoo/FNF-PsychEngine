@@ -416,8 +416,10 @@ class PlayState extends MusicBeatState
 			{
 				if(file.toLowerCase().endsWith('.lua'))
 					new FunkinLua(folder + file);
+				#if HSCRIPT_ALLOWED
 				if(file.toLowerCase().endsWith('.hx'))
 					initHScript(folder + file);
+				#end
 			}
 		#end
 
@@ -601,13 +603,15 @@ class PlayState extends MusicBeatState
 			{
 				if(file.toLowerCase().endsWith('.lua'))
 					new FunkinLua(folder + file);
+				#if HSCRIPT_ALLOWED
 				if(file.toLowerCase().endsWith('.hx'))
 					initHScript(folder + file);
+				#end
 			}
 		#end
 
 		startCallback();
-		RecalculateRating();
+		recalculateRating();
 
 		//PRECACHING MISS SOUNDS BECAUSE I THINK THEY CAN LAG PEOPLE AND FUCK THEM UP IDK HOW HAXE WORKS
 		if(ClientPrefs.data.hitsoundVolume > 0) precacheList.set('hitsound', 'sound');
@@ -2385,21 +2389,17 @@ class PlayState extends MusicBeatState
 			Paths.image(uiPrefix + 'num' + i + uiSuffix);
 	}
 
-	private function popUpScore(note:Note = null):Void
+	private function popUpScore(note:Note):Void
 	{
 		var noteDiff:Float = Math.abs(note.strumTime - Conductor.songPosition + ClientPrefs.data.ratingOffset);
 		vocals.volume = 1;
 
 		if (!ClientPrefs.data.comboStacking && comboGroup.members.length > 0) {
 			for (spr in comboGroup) {
+				comboGroup.remove(spr, true);
 				spr.destroy();
-				comboGroup.remove(spr);
 			}
 		}
-
-		var placement:Float =  FlxG.width * 0.35;
-		var rating:FlxSprite = new FlxSprite();
-		var score:Int = 350;
 
 		//tryna do MS based judgment due to popular demand
 		var daRating:Rating = Conductor.judgeNote(ratingsData, noteDiff / playbackRate);
@@ -2408,7 +2408,7 @@ class PlayState extends MusicBeatState
 		note.ratingMod = daRating.ratingMod;
 		if(!note.ratingDisabled) daRating.hits++;
 		note.rating = daRating.name;
-		score = daRating.score;
+		var score = daRating.score;
 
 		if(daRating.noteSplash && !note.noteSplashData.disabled)
 			spawnNoteSplashOnNote(note);
@@ -2419,11 +2419,15 @@ class PlayState extends MusicBeatState
 			{
 				songHits++;
 				totalPlayed++;
-				RecalculateRating(false);
+				recalculateRating(false);
 			}
 		}
 
-		var uiPrefix:String = "";
+		if(ClientPrefs.data.hideHud) return;
+
+		var placement:Float = FlxG.width * 0.35;
+
+		var uiPrefix:String = '';
 		var uiSuffix:String = '';
 		var antialias:Bool = ClientPrefs.data.antialiasing;
 
@@ -2434,104 +2438,103 @@ class PlayState extends MusicBeatState
 			antialias = !isPixelStage;
 		}
 
-		rating.loadGraphic(Paths.image(uiPrefix + daRating.image + uiSuffix));
-		rating.screenCenter();
-		rating.x = placement - 40;
-		rating.y -= 60;
-		rating.acceleration.y = 550 * playbackRate * playbackRate;
-		rating.velocity.y -= FlxG.random.int(140, 175) * playbackRate;
-		rating.velocity.x -= FlxG.random.int(0, 10) * playbackRate;
-		rating.visible = (!ClientPrefs.data.hideHud && showRating);
-		rating.x += ClientPrefs.data.comboOffset[0];
-		rating.y -= ClientPrefs.data.comboOffset[1];
-		rating.antialiasing = antialias;
+		if(showRating) {
+			var rating:FlxSprite = new FlxSprite().loadGraphic(Paths.image(uiPrefix + daRating.image + uiSuffix));
+			rating.screenCenter();
+			rating.x = placement - 40;
+			rating.y -= 60;
+			rating.acceleration.y = 550 * playbackRate * playbackRate;
+			rating.velocity.y -= FlxG.random.int(140, 175) * playbackRate;
+			rating.velocity.x -= FlxG.random.int(0, 10) * playbackRate;
+			rating.x += ClientPrefs.data.comboOffset[0];
+			rating.y -= ClientPrefs.data.comboOffset[1];
+			rating.antialiasing = antialias;
 
-		var comboSpr:FlxSprite = new FlxSprite().loadGraphic(Paths.image(uiPrefix + 'combo' + uiSuffix));
-		comboSpr.screenCenter();
-		comboSpr.x = placement;
-		comboSpr.acceleration.y = FlxG.random.int(200, 300) * playbackRate * playbackRate;
-		comboSpr.velocity.y -= FlxG.random.int(140, 160) * playbackRate;
-		comboSpr.visible = (!ClientPrefs.data.hideHud && showCombo);
-		comboSpr.x += ClientPrefs.data.comboOffset[0];
-		comboSpr.y -= ClientPrefs.data.comboOffset[1];
-		comboSpr.antialiasing = antialias;
-		comboSpr.y += 60;
-		comboSpr.velocity.x += FlxG.random.int(1, 10) * playbackRate;
-		comboGroup.add(rating);
+			if (!PlayState.isPixelStage) rating.setGraphicSize(Std.int(rating.width * 0.7));
+			else rating.setGraphicSize(Std.int(rating.width * daPixelZoom * 0.85));
+			rating.updateHitbox();
 
-		if (!PlayState.isPixelStage)
-		{
-			rating.setGraphicSize(Std.int(rating.width * 0.7));
-			comboSpr.setGraphicSize(Std.int(comboSpr.width * 0.7));
-		}
-		else
-		{
-			rating.setGraphicSize(Std.int(rating.width * daPixelZoom * 0.85));
-			comboSpr.setGraphicSize(Std.int(comboSpr.width * daPixelZoom * 0.85));
-		}
+			comboGroup.add(rating);
 
-		comboSpr.updateHitbox();
-		rating.updateHitbox();
-
-		var seperatedScore:Array<Int> = [];
-
-		if(combo >= 1000) {
-			seperatedScore.push(Math.floor(combo / 1000) % 10);
-		}
-		seperatedScore.push(Math.floor(combo / 100) % 10);
-		seperatedScore.push(Math.floor(combo / 10) % 10);
-		seperatedScore.push(combo % 10);
-
-		var daLoop:Int = 0;
-		var xThing:Float = 0;
-		if (showCombo)
-			comboGroup.add(comboSpr);
-
-		for (i in seperatedScore)
-		{
-			var numScore:FlxSprite = new FlxSprite().loadGraphic(Paths.image(uiPrefix + 'num' + Std.int(i) + uiSuffix));
-			numScore.screenCenter();
-			numScore.x = placement + (43 * daLoop) - 90 + ClientPrefs.data.comboOffset[2];
-			numScore.y += 80 - ClientPrefs.data.comboOffset[3];
-			
-			if (!PlayState.isPixelStage) numScore.setGraphicSize(Std.int(numScore.width * 0.5));
-			else numScore.setGraphicSize(Std.int(numScore.width * daPixelZoom));
-			numScore.updateHitbox();
-
-			numScore.acceleration.y = FlxG.random.int(200, 300) * playbackRate * playbackRate;
-			numScore.velocity.y -= FlxG.random.int(140, 160) * playbackRate;
-			numScore.velocity.x = FlxG.random.float(-5, 5) * playbackRate;
-			numScore.visible = !ClientPrefs.data.hideHud;
-			numScore.antialiasing = antialias;
-
-			//if (combo >= 10 || combo == 0)
-			if(showComboNum)
-				comboGroup.add(numScore);
-
-			FlxTween.tween(numScore, {alpha: 0}, 0.2 / playbackRate, {
+			FlxTween.tween(rating, {alpha: 0}, 0.2 / playbackRate, {
 				onComplete: function(tween:FlxTween)
 				{
-					numScore.destroy();
+					comboGroup.remove(rating, true);
+					rating.destroy();
+				},
+				startDelay: Conductor.crochet * 0.001 / playbackRate
+			});
+		}
+
+		var xThing:Float = 0;
+		//if (combo >= 10 || combo == 0)
+		if(showComboNum) {
+			var seperatedScore:Array<String> = (combo + "").lpad("0", 3).split('');
+
+			var daLoop:Int = 0;
+
+			for (i in seperatedScore)
+			{
+				var numScore:FlxSprite = new FlxSprite().loadGraphic(Paths.image(uiPrefix + 'num' + i + uiSuffix));
+				numScore.screenCenter();
+				numScore.x = placement + (43 * daLoop) - 90 + ClientPrefs.data.comboOffset[2];
+				numScore.y += 80 - ClientPrefs.data.comboOffset[3];
+
+				if (!PlayState.isPixelStage) numScore.setGraphicSize(Std.int(numScore.width * 0.5));
+				else numScore.setGraphicSize(Std.int(numScore.width * daPixelZoom));
+				numScore.updateHitbox();
+
+				numScore.acceleration.y = FlxG.random.int(200, 300) * playbackRate * playbackRate;
+				numScore.velocity.y -= FlxG.random.int(140, 160) * playbackRate;
+				numScore.velocity.x = FlxG.random.float(-5, 5) * playbackRate;
+				numScore.antialiasing = antialias;
+
+				comboGroup.add(numScore);
+
+				FlxTween.tween(numScore, {alpha: 0}, 0.2 / playbackRate, {
+					onComplete: function(tween:FlxTween)
+					{
+						comboGroup.remove(numScore, true);
+						numScore.destroy();
+					},
+					startDelay: Conductor.crochet * 0.002 / playbackRate
+				});
+
+				daLoop++;
+				if(numScore.x > xThing) xThing = numScore.x;
+			}
+		}
+
+		if (showCombo) {
+			var comboSpr:FlxSprite = new FlxSprite().loadGraphic(Paths.image(uiPrefix + 'combo' + uiSuffix));
+			comboSpr.screenCenter();
+			comboSpr.x = placement;
+			comboSpr.acceleration.y = FlxG.random.int(200, 300) * playbackRate * playbackRate;
+			comboSpr.velocity.y -= FlxG.random.int(140, 160) * playbackRate;
+			comboSpr.x += ClientPrefs.data.comboOffset[0];
+			comboSpr.y -= ClientPrefs.data.comboOffset[1];
+			comboSpr.antialiasing = antialias;
+			comboSpr.y += 60;
+			comboSpr.velocity.x += FlxG.random.int(1, 10) * playbackRate;
+
+			if (!PlayState.isPixelStage) comboSpr.setGraphicSize(Std.int(comboSpr.width * 0.7));
+			else comboSpr.setGraphicSize(Std.int(comboSpr.width * daPixelZoom * 0.85));
+			comboSpr.updateHitbox();
+
+			comboGroup.add(comboSpr);
+
+			if(xThing != 0)
+				comboSpr.x = xThing + 50;
+
+			FlxTween.tween(comboSpr, {alpha: 0}, 0.2 / playbackRate, {
+				onComplete: function(tween:FlxTween)
+				{
+					comboGroup.remove(comboSpr, true);
+					comboSpr.destroy();
 				},
 				startDelay: Conductor.crochet * 0.002 / playbackRate
 			});
-
-			daLoop++;
-			if(numScore.x > xThing) xThing = numScore.x;
 		}
-		comboSpr.x = xThing + 50;
-		FlxTween.tween(rating, {alpha: 0}, 0.2 / playbackRate, {
-			startDelay: Conductor.crochet * 0.001 / playbackRate
-		});
-
-		FlxTween.tween(comboSpr, {alpha: 0}, 0.2 / playbackRate, {
-			onComplete: function(tween:FlxTween)
-			{
-				comboSpr.destroy();
-				rating.destroy();
-			},
-			startDelay: Conductor.crochet * 0.002 / playbackRate
-		});
 	}
 
 	public var strumsBlocked:Array<Bool> = [];
@@ -2761,7 +2764,7 @@ class PlayState extends MusicBeatState
 		if(!practiceMode) songScore -= 10;
 		if(!endingSong) songMisses++;
 		totalPlayed++;
-		RecalculateRating(true);
+		recalculateRating(true);
 
 		// play character anims
 		var char:Character = boyfriend;
@@ -2871,7 +2874,6 @@ class PlayState extends MusicBeatState
 			if (!note.isSustainNote)
 			{
 				combo++;
-				if(combo > 9999) combo = 9999;
 				popUpScore(note);
 			}
 			health += note.hitHealth * healthGain;
@@ -3290,7 +3292,7 @@ class PlayState extends MusicBeatState
 	public var ratingName:String = '?';
 	public var ratingPercent:Float;
 	public var ratingFC:String;
-	public function RecalculateRating(badHit:Bool = false) {
+	public function recalculateRating(badHit:Bool = false) {
 		setOnScripts('score', songScore);
 		setOnScripts('misses', songMisses);
 		setOnScripts('hits', songHits);
@@ -3460,7 +3462,7 @@ class PlayState extends MusicBeatState
 		}
 		FlxG.log.warn('Missing shader $name .frag AND .vert files!');
 		#else
-		FlxG.log.warn('This platform doesn\'t support Runtime Shaders!', false, false, FlxColor.RED);
+		FlxG.log.warn('This platform doesn\'t support Runtime Shaders!');
 		#end
 		return false;
 	}
