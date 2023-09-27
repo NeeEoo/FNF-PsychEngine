@@ -31,8 +31,8 @@ import backend.Mods;
 
 class Paths
 {
-	inline public static var SOUND_EXT = #if web "mp3" #else "ogg" #end;
-	inline public static var VIDEO_EXT = "mp4";
+	inline public static var SOUND_EXT:String = #if web "mp3" #else "ogg" #end;
+	inline public static var VIDEO_EXT:String = "mp4";
 
 	public static function excludeAsset(key:String) {
 		if (!dumpExclusions.contains(key))
@@ -329,18 +329,20 @@ class Paths
 		if(!ignoreMods)
 		{
 			for(mod in Mods.getGlobalMods())
-				if (FileSystem.exists(mods('$mod/$key')))
+				if(FileSystem.exists(mods('$mod/$key')))
 					return true;
 
-			if (FileSystem.exists(mods(Mods.currentModDirectory + '/' + key)) || FileSystem.exists(mods(key)))
+			var activeModFolder:String = mods(Mods.currentModDirectory + '/' + key);
+			if(FileSystem.exists(activeModFolder) || FileSystem.exists(mods(key)))
 				return true;
 		}
 		#end
 
-		if(OpenFlAssets.exists(getPath(key, type, library, false))) {
-			return true;
-		}
-		return false;
+		return OpenFlAssets.exists(getPath(key, type, library, false));
+	}
+
+	public static inline function getFileContents(file:String):String {
+		return #if sys File.getContent(file) #else OpenFlAssets.getText(file) #end;
 	}
 
 	// less optimized but automatic handling
@@ -379,7 +381,7 @@ class Paths
 		#if MODS_ALLOWED
 		var imageLoaded:FlxGraphic = image(key, allowGPU);
 		var txtExists:Bool = false;
-		
+
 		var txt:String = modsTxt(key);
 		if(FileSystem.exists(txt)) {
 			txtExists = true;
@@ -391,10 +393,10 @@ class Paths
 		#end
 	}
 
-	inline static public function formatToSongPath(path:String) {
-		var invalidChars = ~/[~&\\;:<>#]/;
-		var hideChars = ~/[.,'"%?!]/;
+	static final invalidChars = ~/[~&\\;:<>#]/;
+	static final hideChars = ~/[.,'"%?!]/;
 
+	inline static public function formatToSongPath(path:String) {
 		var path = invalidChars.split(path.replace(' ', '-')).join("-");
 		return hideChars.split(path).join("").toLowerCase();
 	}

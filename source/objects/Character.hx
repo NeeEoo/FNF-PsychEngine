@@ -210,7 +210,8 @@ class Character extends FlxSprite
 		{
 			case 'pico-speaker':
 				skipDance = true;
-				loadMappedAnims();
+				loadMappedAnims("picospeaker");
+				TankmenBG.animationNotes = animationNotes;
 				playAnim("shoot1");
 		}
 	}
@@ -304,41 +305,29 @@ class Character extends FlxSprite
 		specialAnim = false;
 		animation.play(AnimName, Force, Reversed, Frame);
 
-		var daOffset = animOffsets.get(AnimName);
+		offset.set(0, 0);
 		if (animOffsets.exists(AnimName))
 		{
+			var daOffset = animOffsets.get(AnimName);
 			offset.set(daOffset[0], daOffset[1]);
 		}
-		else
-			offset.set(0, 0);
 
 		if (curCharacter.startsWith('gf'))
 		{
-			if (AnimName == 'singLEFT')
-			{
-				danced = true;
-			}
-			else if (AnimName == 'singRIGHT')
-			{
-				danced = false;
-			}
-
-			if (AnimName == 'singUP' || AnimName == 'singDOWN')
-			{
-				danced = !danced;
-			}
+			// THIS MAKES GF BOP CORRECTLY WHEN SHE'S THE OPPONENT/PLAYER
+			if (AnimName == 'singLEFT') danced = true;
+			else if (AnimName == 'singRIGHT') danced = false;
+			else if (AnimName == 'singUP' || AnimName == 'singDOWN') danced = !danced;
 		}
 	}
-	
-	function loadMappedAnims():Void
+
+	function loadMappedAnims(map:String):Void
 	{
-		var noteData:Array<SwagSection> = Song.loadFromJson('picospeaker', Paths.formatToSongPath(PlayState.SONG.song)).notes;
-		for (section in noteData) {
-			for (songNotes in section.sectionNotes) {
+		var currentSong :String = Paths.formatToSongPath(PlayState.SONG.song);
+		var noteData:Array<SwagSection> = Song.loadFromJson(map, currentSong).notes;
+		for (section in noteData)
+			for (songNotes in section.sectionNotes)
 				animationNotes.push(songNotes);
-			}
-		}
-		TankmenBG.animationNotes = animationNotes;
 		animationNotes.sort(sortAnims);
 	}
 
@@ -348,26 +337,11 @@ class Character extends FlxSprite
 	}
 
 	public var danceEveryNumBeats:Int = 2;
-	private var settingCharacterUp:Bool = true;
+
 	public function recalculateDanceIdle() {
-		var lastDanceIdle:Bool = danceIdle;
 		danceIdle = (animation.getByName('danceLeft' + idleSuffix) != null && animation.getByName('danceRight' + idleSuffix) != null);
 
-		if(settingCharacterUp)
-		{
-			danceEveryNumBeats = (danceIdle ? 1 : 2);
-		}
-		else if(lastDanceIdle != danceIdle)
-		{
-			var calc:Float = danceEveryNumBeats;
-			if(danceIdle)
-				calc /= 2;
-			else
-				calc *= 2;
-
-			danceEveryNumBeats = Math.round(Math.max(calc, 1));
-		}
-		settingCharacterUp = false;
+		danceEveryNumBeats = (danceIdle ? 1 : 2);
 	}
 
 	public function addOffset(name:String, x:Float = 0, y:Float = 0)
